@@ -4,7 +4,6 @@ use derivative::Derivative;
 use github_flows::octocrab::models::{ issues::Issue, Repository, User };
 use github_flows::{ get_octo, octocrab, GithubLogin };
 use serde::{ Deserialize, Serialize };
-use openai_flows::chat::ChatModel;
 
 #[derive(Derivative, Serialize, Deserialize, Debug, Clone)]
 pub struct GitMemory {
@@ -1250,7 +1249,7 @@ pub async fn search_discussions_integrated(
                     "Analyze the content: {disuccsion_texts}. Briefly summarize the central topic, participants' actions, primary viewpoints, and outcomes. Emphasize the role of '{target_str}' in driving the discussion or reaching a resolution. Aim for a succinct summary that is rich in analysis and under 192 tokens."
                 );
 
-                match chat_inner(sys_prompt_1, usr_prompt_1, 256, ChatModel::GPT35Turbo16K).await {
+                match chat_inner_async(sys_prompt_1, usr_prompt_1, 256, "mistralai/Mistral-7B-Instruct-v0.1").await {
                     Ok(r) => {
                         text_out.push_str(&format!("{} {}", url, r));
                         git_mem_vec.push(GitMemory {

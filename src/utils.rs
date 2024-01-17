@@ -1,4 +1,3 @@
-use openai_flows::{ chat::{ ChatModel, ChatOptions }, OpenAIFlows };
 use log;
 use serde_json::Value;
 use async_openai::{
@@ -10,8 +9,13 @@ use async_openai::{
         CreateChatCompletionRequestArgs,
         // FinishReason,
     },
-    Client,
+    Client as OpenAIClient,
+    config::Config,
 };
+use std::env;
+use reqwest::header::HeaderMap;
+use secrecy::Secret;
+use std::collections::HashMap;
 
 pub fn squeeze_fit_remove_quoted(inp_str: &str, max_len: u16, split: f32) -> String {
     let mut body = String::new();
@@ -100,7 +104,7 @@ pub fn squeeze_fit_post_texts(inp_str: &str, max_len: u16, split: f32) -> String
     ];
     let request = CreateChatCompletionRequestArgs::default()
         .max_tokens(gen_len_1)
-        .model(ChatModel::GPT35Turbo16K)
+        .model("mistralai/Mistral-7B-Instruct-v0.1")
         .messages(messages.clone())
         .build()?;
 
@@ -121,7 +125,7 @@ pub fn squeeze_fit_post_texts(inp_str: &str, max_len: u16, split: f32) -> String
 
     let request = CreateChatCompletionRequestArgs::default()
         .max_tokens(gen_len_2)
-        .model(ChatModel::GPT35Turbo16K)
+        .model("mistralai/Mistral-7B-Instruct-v0.1")
         .messages(messages)
         .build()?;
 
@@ -138,30 +142,167 @@ pub fn squeeze_fit_post_texts(inp_str: &str, max_len: u16, split: f32) -> String
     }
 } */
 
-pub async fn chat_inner(
-    system_prompt: &str,
-    user_input: &str,
-    max_token: u16,
-    model: ChatModel
+pub async fn chain_of_chat(
+    sys_prompt_1: &str,
+    usr_prompt_1: &str,
+    chat_id: &str,
+    gen_len_1: u16,
+    usr_prompt_2: &str,
+    gen_len_2: u16,
+    error_tag: &str
 ) -> anyhow::Result<String> {
-    let openai = OpenAIFlows::new();
+    use reqwest::header::{ HeaderValue, CONTENT_TYPE, USER_AGENT };
+    let token = env::var("DEEP_API_KEY").expect("DEEP_API_KEY must be set");
 
-    let co = ChatOptions {
-        model: model,
-        restart: true,
-        system_prompt: Some(system_prompt),
-        max_tokens: Some(max_token),
-        temperature: Some(0.7),
-        ..Default::default()
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    headers.insert(USER_AGENT, HeaderValue::from_static("MyClient/1.0.0"));
+    let config = LocalServiceProviderConfig {
+        // api_base: String::from("http://52.37.228.1:8080/v1"),
+        api_base: String::from("https://api.deepinfra.com/v1/openai"),
+        headers: headers,
+        api_key: Secret::new(token),
+        query: HashMap::new(),
     };
 
-    match openai.chat_completion("chat_id", user_input, &co).await {
-        Ok(res) => Ok(res.choice),
-        Err(_e) => Err(anyhow::anyhow!("OpenAI Error {:?}", _e)),
+    let model = "mistralai/Mistral-7B-Instruct-v0.1";
+    let client = OpenAIClient::with_config(config);
+
+    let mut messages = vec![
+        ChatCompletionRequestSystemMessageArgs::default()
+            .content(sys_prompt_1)
+            .build()
+            .expect("Failed to build system message")
+            .into(),
+        ChatCompletionRequestUserMessageArgs::default().content(usr_prompt_1).build()?.into()
+    ];
+    let request = CreateChatCompletionRequestArgs::default()
+        .max_tokens(gen_len_1)
+        .model(model)
+        .messages(messages.clone())
+        .build()?;
+
+    // dbg!("{:?}", request.clone());
+
+    let chat = client.chat().create(request).await?;
+
+    match chat.choices[0].message.clone().content {
+        Some(res) => {
+            println!("{:?}", res);
+        }
+        None => {
+            return Err(anyhow::anyhow!(error_tag.to_string()));
+        }
+    }
+
+    messages.push(
+        ChatCompletionRequestUserMessageArgs::default().content(usr_prompt_2).build()?.into()
+    );
+
+    let request = CreateChatCompletionRequestArgs::default()
+        .max_tokens(gen_len_2)
+        .model(model)
+        .messages(messages)
+        .build()?;
+
+    let chat = client.chat().create(request).await?;
+
+    match chat.choices[0].message.clone().content {
+        Some(res) => {
+            println!("{:?}", res);
+            Ok(res)
+        }
+        None => {
+            return Err(anyhow::anyhow!(error_tag.to_string()));
+        }
     }
 }
 
 pub async fn chat_inner_async(
+    system_prompt: &str,
+    user_input: &str,
+    max_token: u16,
+    model: &str
+) -> anyhow::Result<String> {
+    use reqwest::header::{ HeaderValue, CONTENT_TYPE, USER_AGENT };
+    let token = env::var("DEEP_API_KEY").expect("DEEP_API_KEY must be set");
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    headers.insert(USER_AGENT, HeaderValue::from_static("MyClient/1.0.0"));
+    let config = LocalServiceProviderConfig {
+        // api_base: String::from("http://127.0.0.1:8080/v1"),
+        api_base: String::from("https://api.deepinfra.com/v1/openai"),
+        headers: headers,
+        api_key: Secret::new(token),
+        query: HashMap::new(),
+    };
+
+    let client = OpenAIClient::with_config(config);
+    let messages = vec![
+        ChatCompletionRequestSystemMessageArgs::default()
+            .content(system_prompt)
+            .build()
+            .expect("Failed to build system message")
+            .into(),
+        ChatCompletionRequestUserMessageArgs::default().content(user_input).build()?.into()
+    ];
+    let request = CreateChatCompletionRequestArgs::default()
+        .max_tokens(max_token)
+        .model(model)
+        .messages(messages)
+        .build()?;
+
+    let chat = match client.chat().create(request).await {
+        Ok(chat) => chat,
+        Err(_e) => {
+            println!("Error getting response from OpenAI: {:?}", _e);
+            panic!();
+        }
+    };
+
+    match chat.choices[0].message.clone().content {
+        Some(res) => {
+            // log::info!("{:?}", chat.choices[0].message.clone());
+            Ok(res)
+        }
+        None => Err(anyhow::anyhow!("Failed to get reply from OpenAI")),
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct LocalServiceProviderConfig {
+    pub api_base: String,
+    pub headers: HeaderMap,
+    pub api_key: Secret<String>,
+    pub query: HashMap<String, String>,
+}
+
+impl Config for LocalServiceProviderConfig {
+    fn headers(&self) -> HeaderMap {
+        self.headers.clone()
+    }
+
+    fn url(&self, path: &str) -> String {
+        format!("{}{}", self.api_base, path)
+    }
+
+    fn query(&self) -> Vec<(&str, &str)> {
+        self.query
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect()
+    }
+
+    fn api_base(&self) -> &str {
+        &self.api_base
+    }
+
+    fn api_key(&self) -> &Secret<String> {
+        &self.api_key
+    }
+}
+
+/* pub async fn chat_inner_async(
     system_prompt: &str,
     user_input: &str,
     max_token: u16,
@@ -195,11 +336,11 @@ pub async fn chat_inner_async(
         }
         None => Err(anyhow::anyhow!("Failed to get reply from OpenAI")),
     }
-}
+} */
 
 pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
     use regex::Regex;
-    let  parsed = match serde_json::from_str(input) {
+    let parsed = match serde_json::from_str(input) {
         Ok(v) => v,
         Err(e) => {
             log::error!("Error parsing JSON: {:?}", e);
@@ -208,9 +349,9 @@ pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
             let keys = ["impactful", "alignment", "patterns", "synergy", "significance"];
             for key in keys.iter() {
                 let regex_pattern = format!(r#""{}":\s*"([^"]*)""#, key);
-                let regex = Regex::new(&regex_pattern).map_err(|_|
-                    anyhow::Error::msg("Failed to compile regex pattern")
-                ).expect("Failed to compile regex pattern");
+                let regex = Regex::new(&regex_pattern)
+                    .map_err(|_| anyhow::Error::msg("Failed to compile regex pattern"))
+                    .expect("Failed to compile regex pattern");
                 if let Some(captures) = regex.captures(input) {
                     if let Some(value) = captures.get(1) {
                         values_map.insert(*key, value.as_str().to_string());
@@ -345,60 +486,4 @@ pub async fn github_http_get(url: &str) -> anyhow::Result<Vec<u8>> {
             Err(anyhow::anyhow!(_e))
         }
     }
-}
-
-pub async fn chain_of_chat(
-    sys_prompt_1: &str,
-    usr_prompt_1: &str,
-    chat_id: &str,
-    gen_len_1: u16,
-    usr_prompt_2: &str,
-    gen_len_2: u16,
-    error_tag: &str
-) -> anyhow::Result<String> {
-    let openai = OpenAIFlows::new();
-
-    let co_1 = ChatOptions {
-        model: ChatModel::GPT35Turbo16K,
-        restart: true,
-        system_prompt: Some(sys_prompt_1),
-        max_tokens: Some(gen_len_1),
-        temperature: Some(0.7),
-        ..Default::default()
-    };
-
-    match openai.chat_completion(chat_id, usr_prompt_1, &co_1).await {
-        Ok(res_1) => {
-            let sys_prompt_2 =
-                serde_json::json!([{"role": "system", "content": sys_prompt_1},
-    {"role": "user", "content": usr_prompt_1},
-    {"role": "assistant", "content": &res_1.choice}]).to_string();
-
-            let co_2 = ChatOptions {
-                model: ChatModel::GPT35Turbo16K,
-                restart: false,
-                system_prompt: Some(&sys_prompt_2),
-                max_tokens: Some(gen_len_2),
-                temperature: Some(0.7),
-                ..Default::default()
-            };
-            match openai.chat_completion(chat_id, usr_prompt_2, &co_2).await {
-                Ok(res_2) => {
-                    if res_2.choice.len() < 10 {
-                        log::error!(
-                            "{}, GPT generation went sideway: {:?}",
-                            error_tag,
-                            res_2.choice
-                        );
-                        return Err(anyhow::anyhow!(error_tag.to_string()));
-                    }
-                    return Ok(res_2.choice);
-                }
-                Err(_e) => log::error!("{}, Step 2 GPT generation error {:?}", error_tag, _e),
-            };
-        }
-        Err(_e) => log::error!("{}, Step 1 GPT generation error {:?}", error_tag, _e),
-    }
-
-    Err(anyhow::anyhow!(error_tag.to_string()))
 }

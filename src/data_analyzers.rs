@@ -5,7 +5,6 @@ use github_flows::{ get_octo, octocrab::models::{ issues::Comment, issues::Issue
 use log;
 use serde::Deserialize;
 use std::collections::{ HashMap, HashSet };
-use openai_flows::chat::ChatModel;
 
 pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     #[derive(Deserialize)]
@@ -50,43 +49,7 @@ pub async fn get_repo_info(about_repo: &str) -> Option<String> {
         return Some(payload);
     }
 }
-pub async fn get_repo_overview_by_scraper(about_repo: &str) -> Option<String> {
-    let repo_home_url = format!("https://github.com/{}", about_repo);
 
-    let raw_text;
-    match web_scraper_flows::get_page_text(&repo_home_url).await {
-        Ok(page_text) => {
-            raw_text = page_text;
-        }
-        Err(_e) => {
-            log::error!("Error getting response from Github: {:?}", _e);
-
-            return None;
-        }
-    }
-
-    let raw_text = if raw_text.len() > 48_000 {
-        squeeze_fit_post_texts(&raw_text, 12_000, 0.7)
-    } else {
-        raw_text.to_string()
-    };
-
-    let sys_prompt =
-        "Your task is to examine the textual content from a GitHub repo page, emphasizing the Header, About, Release, Contributors, Languages, and README sections. This process should be carried out objectively, focusing on factual information extraction from each segment. Avoid making subjective judgments or inferences. The data should be presented systematically, corresponding to each section. Please note, the provided text will be in a flattened format.";
-
-    let usr_prompt =
-        &format!("I’ve obtained a flattened text from a GitHub repo page and require analysis of the following sections: 1) Header, with data on Fork, Star, Issues, Pull Request, etc.; 2) About, containing project description, keywords, number of stars, watchers, and forks; 3) Release, with details on the latest release and total releases; 4) Contributors, showing the number of contributors; 5) Languages, displaying the language composition in the project, and 6) README, which is usually a body of text describing the project, please summarize README when presenting result. Please extract and present data from these sections individually. Here is the text: {}", raw_text);
-
-    match chat_inner(sys_prompt, usr_prompt, 700, ChatModel::GPT35Turbo16K).await {
-        Ok(r) => {
-            return Some(r);
-        }
-        Err(_e) => {
-            log::error!("Error summarizing meta data: {}", _e);
-            return None;
-        }
-    }
-}
 
 pub async fn is_valid_owner_repo(
     owner: &str,
@@ -224,7 +187,7 @@ pub async fn analyze_readme(content: &str) -> Option<String> {
         "Based on the profile and README provided: {content}, extract a concise summary detailing this project's factual significance in its domain, their areas of expertise, and the main features and goals of the project. Ensure the insights are objective and under 110 tokens."
     );
 
-    match chat_inner(sys_prompt_1, usr_prompt_1, 256, ChatModel::GPT35Turbo16K).await {
+    match chat_inner_async(sys_prompt_1, usr_prompt_1, 256, "mistralai/Mistral-7B-Instruct-v0.1").await {
         Ok(r) => {
             return Some(r);
         }
@@ -335,7 +298,7 @@ pub async fn analyze_issue_integrated(
         commenters_to_watch_str
     );
 
-    match chat_inner(sys_prompt_1, usr_prompt_1, 128, ChatModel::GPT35Turbo16K).await {
+    match chat_inner_async(sys_prompt_1, usr_prompt_1, 128, "mistralai/Mistral-7B-Instruct-v0.1").await {
         Ok(r) => {
             let parsed = parse_issue_summary_from_json(&r)
                 .ok()
@@ -395,11 +358,11 @@ pub async fn process_commits(
                 let usr_prompt_1 = format!(
                     "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
                 );
-                let summary = chat_inner(
+                let summary = chat_inner_async(
                     &sys_prompt_1,
                     &usr_prompt_1,
                     128,
-                    ChatModel::GPT35Turbo16K
+                    "mistralai/Mistral-7B-Instruct-v0.1"
                 ).await.ok()?;
                 // log::info!("Summary: {:?}", summary.clone());
                 Some((commit_obj.name, commit_obj.source_url, summary))
@@ -453,7 +416,7 @@ Your JSON response should use the following keys with appropriate string values:
 Ensure that the JSON is properly formatted, with correct escaping of special characters, and is ready to be parsed by a JSON parser that expects RFC8259-compliant JSON. Avoid adding any non-JSON content or formatting."#
     );
 
-    chat_inner_async(system_prompt, user_input, 500, "gpt-3.5-turbo-1106").await.ok()
+    chat_inner_async(system_prompt, user_input, 500, "mistralai/Mistral-7B-Instruct-v0.1").await.ok()
 }
 
 /* pub async fn correlate_commits_issues_discussions(
