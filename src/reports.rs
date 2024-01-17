@@ -13,7 +13,7 @@ pub async fn weekly_report(
     user_name: Option<String>,
     token: Option<String>
 ) -> String {
-    let n_days = 7u16;
+    let n_days = 14u16;
 
     let contributors_set;
 
