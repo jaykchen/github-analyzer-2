@@ -246,7 +246,7 @@ pub async fn analyze_issue_integrated(
         token_str
     );
     // let octocrab = get_octo(&GithubLogin::Default);
-    log::info!("comments_url: {}", comments_url);
+    // log::info!("comments_url: {}", comments_url);
     let response = github_http_get(&comments_url).await?;
     let comments_obj = serde_json::from_slice::<Vec<Comment>>(&response)?;
 
@@ -269,13 +269,13 @@ pub async fn analyze_issue_integrated(
     let target_str = target_person
         .clone()
         .map_or("key participants".to_string(), |t| t.to_string());
-    log::info!("issue_title: {}", issue_title);
+    // log::info!("issue_title: {}", issue_title);
 
     let sys_prompt_1 =
         "Analyze the GitHub issues data to identify key problem areas and notable contributions from participants. Focus on specific solutions mentioned, and trace evidence of contributions that led to a solution or consensus. The goal is to map out significant technical contributions and the developmental story behind the issue's resolution.";
 
     let commenters_to_watch_str = if !target_str.is_empty() || issue_commenters_to_watch.len() == 0 {
-        target_str
+        String::from("top 3 contributors")
     } else {
         issue_commenters_to_watch.join(", ")
     };
@@ -311,10 +311,10 @@ Adhere to this format for the summarized analysis."
         ).await
     {
         Ok(r) => {
-            log::info!("Summary: {:?}", r.clone());
             let parsed = parse_issue_summary_from_json(&r)
                 .ok()
                 .unwrap_or_else(|| vec![]);
+            log::info!("Parsed: {:?}", parsed.clone());
 
             let out = parsed
                 .into_iter()
@@ -435,102 +435,6 @@ Ensure that the JSON is properly formatted, with correct escaping of special cha
         "mistralai/Mistral-7B-Instruct-v0.1"
     ).await.ok()
 }
-
-/* pub async fn correlate_commits_issues_discussions(
-    _profile_data: Option<&str>,
-    _commits_summary: Option<&str>,
-    _issues_summary: Option<&str>,
-    _discussions_summary: Option<&str>,
-    target_person: Option<&str>,
-    total_input_entry_count: u16
-) -> Option<String> {
-    let total_space = 16000; // 16k tokens
-
-    let _total_ratio = 11.0; // 1 + 4 + 4 + 2
-    let profile_ratio = 1.0;
-    let commit_ratio = 4.0;
-    let issue_ratio = 4.0;
-    let discussion_ratio = 2.0;
-
-    let available_ratios = [
-        _profile_data.map(|_| profile_ratio),
-        _commits_summary.map(|_| commit_ratio),
-        _issues_summary.map(|_| issue_ratio),
-        _discussions_summary.map(|_| discussion_ratio),
-    ];
-
-    let total_available_ratio: f32 = available_ratios
-        .iter()
-        .filter_map(|&x| x)
-        .sum();
-
-    let compute_space = |ratio: f32| -> usize {
-        ((total_space as f32) * (ratio / total_available_ratio)) as usize
-    };
-
-    let profile_space = _profile_data.map_or(0, |_| compute_space(profile_ratio));
-    let commit_space = _commits_summary.map_or(0, |_| compute_space(commit_ratio));
-    let issue_space = _issues_summary.map_or(0, |_| compute_space(issue_ratio));
-    let discussion_space = _discussions_summary.map_or(0, |_| compute_space(discussion_ratio));
-
-    let trim_to_allocated_space = |source: &str, space: usize| -> String {
-        source
-            .chars()
-            .take(space * 3)
-            .collect()
-    };
-
-    let profile_str = _profile_data.map_or("".to_string(), |x| {
-        format!("profile data: {}", trim_to_allocated_space(x, profile_space))
-    });
-    let commits_str = _commits_summary.map_or("".to_string(), |x| {
-        format!("commit logs: {}", trim_to_allocated_space(x, commit_space))
-    });
-    let issues_str = _issues_summary.map_or("".to_string(), |x| {
-        format!("issue post: {}", trim_to_allocated_space(x, issue_space))
-    });
-    let discussions_str = _discussions_summary.map_or("".to_string(), |x| {
-        format!("discussion posts: {}", trim_to_allocated_space(x, discussion_space))
-    });
-
-    let target_str = target_person.map_or("key participants'".to_string(), |t| format!("{t}'s"));
-
-    let sys_prompt_1 =
-        "Analyze the GitHub activity data and profile data over the week to detect both key impactful contributions and connections between commits, issues, and discussions. Highlight specific code changes, resolutions, and improvements. Furthermore, trace evidence of commits addressing specific issues, discussions leading to commits, or issues spurred by discussions. The aim is to map out both the impactful technical advancements and the developmental narrative of the project.";
-
-    let usr_prompt_1 = &format!(
-        "From {profile_str}, {commits_str}, {issues_str}, and {discussions_str}, detail {target_str} significant technical contributions. Enumerate individual tasks, code enhancements, and bug resolutions, emphasizing impactful contributions. Concurrently, identify connections: commits that appear to resolve specific issues, discussions that may have catalyzed certain commits, or issues influenced by preceding discussions. Extract tangible instances showcasing both impact and interconnections within the week."
-    );
-
-    let (gen_1_size, gen_2_size, gen_2_reminder) = match total_input_entry_count {
-        0..=3 => (384, 96, 250),
-        4..=14 => (512, 350, 350),
-        15.. => (1024, 500, 500),
-    };
-
-    let usr_prompt_2 = &format!(
-        r#"Analyze the key technical contributions made by {target_str} this week and summarize the information into a flat JSON structure with just one level of depth. Each key in the JSON should map directly to a single string value describing the contribution or observation in a full sentence or a short paragraph. Do not include nested objects or arrays. If no information is available for a point, provide an empty string as the value. 
-
-Please ensure that the JSON output is compliant with RFC8259 and can be iterated as simple key-value pairs where the values are strings. Your response should follow this template:
-{{
-"impactful": "Provide a single string value summarizing impactful contributions and their interconnections.",
-"alignment": "Provide a single string value explaining how the contributions align with the project's goals.",
-"patterns": "Provide a single string value identifying any recurring patterns or trends in the contributions.",
-"synergy": "Provide a single string value discussing the synergy between individual and collective advancement.",
-"significance": "Provide a single string value commenting on the significance of the contributions."
-}}
-"#
-    );
-    chain_of_chat(
-        sys_prompt_1,
-        usr_prompt_1,
-        "correlate-99",
-        gen_1_size,
-        usr_prompt_2,
-        gen_2_size,
-        "correlate_commits_issues_discussions"
-    ).await.ok()
-} */
 
 pub async fn correlate_user_and_home_project(
     home_repo_data: &str,

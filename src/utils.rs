@@ -127,7 +127,7 @@ pub async fn chain_of_chat(
 
     match chat.choices[0].message.clone().content {
         Some(res) => {
-            log::info!("{:?}", res);
+            log::info!("step 1 Points: {:?}", res);
         }
         None => {
             return Err(anyhow::anyhow!(error_tag.to_string()));
@@ -148,7 +148,7 @@ pub async fn chain_of_chat(
 
     match chat.choices[0].message.clone().content {
         Some(res) => {
-            log::info!("{:?}", res);
+            log::info!("step 2 Raw: {:?}", res);
             Ok(res)
         }
         None => {
