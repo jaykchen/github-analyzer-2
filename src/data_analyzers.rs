@@ -78,7 +78,6 @@ pub async fn process_issues(
     contributors_set: HashSet<String>,
     token: Option<String>
 ) -> anyhow::Result<HashMap<String, (String, String)>> {
-
     let mut issues_map = HashMap::<String, (String, String)>::new();
 
     for issue in inp_vec.iter() {
@@ -249,6 +248,7 @@ pub async fn analyze_issue_integrated(
     // log::info!("comments_url: {}", comments_url);
     let response = github_http_get(&comments_url).await?;
     let comments_obj = serde_json::from_slice::<Vec<Comment>>(&response)?;
+    let mut contributors_set = contributors_set.clone();
 
     for comment in &comments_obj {
         let comment_body = match &comment.body {
@@ -256,9 +256,10 @@ pub async fn analyze_issue_integrated(
             None => String::new(),
         };
         let commenter = &comment.user.login;
-        if contributors_set.contains(commenter) {
-            issue_commenters_to_watch.push(commenter.to_string());
-        }
+        match contributors_set.remove(commenter) {
+            true => issue_commenters_to_watch.push(commenter.to_string()),
+            false => (),
+        };
 
         let commenter_input = format!("{} commented: {}", commenter, comment_body);
         all_text_from_issue.push_str(&commenter_input);
@@ -266,19 +267,16 @@ pub async fn analyze_issue_integrated(
 
     all_text_from_issue = all_text_from_issue.chars().take(32_000).collect();
 
-    let target_str = target_person
-        .clone()
-        .map_or("key participants".to_string(), |t| t.to_string());
     // log::info!("issue_title: {}", issue_title);
 
     let sys_prompt_1 =
         "Analyze the GitHub issues data to identify key problem areas and notable contributions from participants. Focus on specific solutions mentioned, and trace evidence of contributions that led to a solution or consensus. The goal is to map out significant technical contributions and the developmental story behind the issue's resolution.";
 
     let commenters_to_watch_str = match
-        (target_str.is_empty(), issue_commenters_to_watch.is_empty())
+        (target_person.is_none(), issue_commenters_to_watch.is_empty())
     {
-        (false, _) => target_str,
-        (_, false) => issue_commenters_to_watch.join(", "),
+        (false, _) => target_person.unwrap_or_default().to_string(),
+        (true, false) => issue_commenters_to_watch.join(", "),
         (_, _) => String::from("top contributors, no more than 3,"),
     };
 
