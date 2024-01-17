@@ -50,7 +50,6 @@ pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     }
 }
 
-
 pub async fn is_valid_owner_repo(
     owner: &str,
     repo: &str
@@ -124,6 +123,44 @@ pub async fn process_issues(
 ) -> anyhow::Result<HashMap<String, (String, String)>> {
     use futures::future::join_all;
 
+    let mut issues_map = HashMap::<String, (String, String)>::new();
+
+    for issue in inp_vec.iter() {
+        let items = analyze_issue_integrated(
+            &issue,
+            target_person.clone(),
+            contributors_set.clone(),
+            token.clone()
+        ).await?;
+
+        for (user_name, url, summary) in items {
+            issues_map
+                .entry(user_name.clone())
+                .and_modify(|tup| {
+                    tup.0.push_str("\n");
+                    tup.0.push_str(&url);
+                    tup.1.push_str("\n");
+                    tup.1.push_str(&summary);
+                })
+                .or_insert((url.to_string(), summary.to_string()));
+        }
+    }
+
+    if issues_map.len() == 0 {
+        anyhow::bail!("No issues processed");
+    }
+
+    Ok(issues_map)
+}
+
+/* pub async fn process_issues(
+    inp_vec: Vec<Issue>,
+    target_person: Option<String>,
+    contributors_set: HashSet<String>,
+    token: Option<String>
+) -> anyhow::Result<HashMap<String, (String, String)>> {
+    use futures::future::join_all;
+
     let issue_futures: Vec<_> = inp_vec
         .into_iter()
         .map(|issue| {
@@ -171,7 +208,7 @@ pub async fn process_issues(
     }
 
     Ok(issues_map)
-}
+} */
 
 pub async fn analyze_readme(content: &str) -> Option<String> {
     let sys_prompt_1 = &format!(
@@ -187,7 +224,14 @@ pub async fn analyze_readme(content: &str) -> Option<String> {
         "Based on the profile and README provided: {content}, extract a concise summary detailing this project's factual significance in its domain, their areas of expertise, and the main features and goals of the project. Ensure the insights are objective and under 110 tokens."
     );
 
-    match chat_inner_async(sys_prompt_1, usr_prompt_1, 256, "mistralai/Mistral-7B-Instruct-v0.1").await {
+    match
+        chat_inner_async(
+            sys_prompt_1,
+            usr_prompt_1,
+            256,
+            "mistralai/Mistral-7B-Instruct-v0.1"
+        ).await
+    {
         Ok(r) => {
             return Some(r);
         }
@@ -298,7 +342,14 @@ pub async fn analyze_issue_integrated(
         commenters_to_watch_str
     );
 
-    match chat_inner_async(sys_prompt_1, usr_prompt_1, 128, "mistralai/Mistral-7B-Instruct-v0.1").await {
+    match
+        chat_inner_async(
+            sys_prompt_1,
+            usr_prompt_1,
+            128,
+            "mistralai/Mistral-7B-Instruct-v0.1"
+        ).await
+    {
         Ok(r) => {
             let parsed = parse_issue_summary_from_json(&r)
                 .ok()
@@ -416,7 +467,12 @@ Your JSON response should use the following keys with appropriate string values:
 Ensure that the JSON is properly formatted, with correct escaping of special characters, and is ready to be parsed by a JSON parser that expects RFC8259-compliant JSON. Avoid adding any non-JSON content or formatting."#
     );
 
-    chat_inner_async(system_prompt, user_input, 500, "mistralai/Mistral-7B-Instruct-v0.1").await.ok()
+    chat_inner_async(
+        system_prompt,
+        user_input,
+        500,
+        "mistralai/Mistral-7B-Instruct-v0.1"
+    ).await.ok()
 }
 
 /* pub async fn correlate_commits_issues_discussions(
