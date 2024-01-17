@@ -6,50 +6,6 @@ use log;
 use serde::Deserialize;
 use std::collections::{ HashMap, HashSet };
 
-pub async fn get_repo_info(about_repo: &str) -> Option<String> {
-    #[derive(Deserialize)]
-    struct CommunityProfile {
-        description: Option<String>,
-        readme: Option<String>,
-        updated_at: Option<DateTime<Utc>>,
-    }
-
-    let community_profile_url = format!("repos/{}/community/profile", about_repo);
-
-    let mut description = String::new();
-    let octocrab = get_octo(&GithubLogin::Default);
-
-    match octocrab.get::<CommunityProfile, _, ()>(&community_profile_url, None::<&()>).await {
-        Ok(profile) => {
-            description = profile.description.as_ref().unwrap_or(&String::from("")).to_string();
-        }
-        Err(e) => log::error!("Error parsing Community Profile: {:?}", e),
-    }
-
-    let mut payload = String::new();
-    match get_readme_owner_repo(about_repo).await {
-        Some(content) => {
-            let content = content.chars().take(20000).collect::<String>();
-            match analyze_readme(&content).await {
-                Some(summary) => {
-                    payload = summary;
-                }
-                None => log::error!("Error parsing README.md: {}", about_repo),
-            }
-        }
-        None => log::error!("Error fetching README.md: {}", about_repo),
-    }
-    if description.is_empty() && payload.is_empty() {
-        return None;
-    }
-
-    if payload.is_empty() {
-        return Some(description);
-    } else {
-        return Some(payload);
-    }
-}
-
 pub async fn is_valid_owner_repo(
     owner: &str,
     repo: &str
@@ -278,11 +234,6 @@ pub async fn analyze_issue_integrated(
         Some(t) => format!("&token={}", t.as_str()),
     };
 
-    // let comments_url = format!(
-    //     "{}/comments?sort=updated&order=desc&per_page=100{}",
-    //     issue_url.replace("https://api.github.com/", ""),
-    //     token_str
-    // );
     let comments_url = format!(
         "{}/comments?sort=updated&order=desc&per_page=100{}",
         issue_url,
@@ -351,6 +302,8 @@ pub async fn analyze_issue_integrated(
         ).await
     {
         Ok(r) => {
+
+            log::info!("Summary: {:?}", r.clone());
             let parsed = parse_issue_summary_from_json(&r)
                 .ok()
                 .unwrap_or_else(|| vec![]);
