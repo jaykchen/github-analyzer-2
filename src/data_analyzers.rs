@@ -275,7 +275,7 @@ pub async fn analyze_issue_integrated(
         "Analyze the GitHub issues data to identify key problem areas and notable contributions from participants. Focus on specific solutions mentioned, and trace evidence of contributions that led to a solution or consensus. The goal is to map out significant technical contributions and the developmental story behind the issue's resolution.";
 
     let commenters_to_watch_str = if !target_str.is_empty() || issue_commenters_to_watch.len() == 0 {
-        String::from("top 3 contributors")
+        String::from("top contributors, no more than 3,")
     } else {
         issue_commenters_to_watch.join(", ")
     };
@@ -285,13 +285,14 @@ pub async fn analyze_issue_integrated(
     );
 
     let usr_prompt_2 = &format!(
-        "Summarize the analysis by touching on the following points: the central problem presented in the issue, the primary solutions proposed or accepted, and the significance of each individual's role, specifically '{commenters_to_watch_str}', in the discussion's progress or resolution. If a person's contribution is minimal or not present, exclude them from the summary. Present the analysis in a flat JSON structure with a single level of depth, where each key corresponds directly to a string that summarises the contributions. Follow this template, substituting 'contributor_name' with the actual name and 'summary' with your analysis of their input: 
+        "Summarize the analysis by touching on the following points: the central problem presented in the issue, the primary solutions proposed or accepted, and the significance of key individual's role, specifically '{commenters_to_watch_str}', in the discussion's progress or resolution. If a person's contribution is minimal or not present, exclude them from the summary. Present the analysis in a flat JSON structure with a single level of depth, where each key corresponds directly to a string that summarises the contributions. Follow this template, substituting 'contributor_name' with the actual name and 'summary' with your analysis of their input.
+Use real user names, don't use placeholder names like 'user_1' or 'contributor_name_1', skip the 'contrubutor: summary' pair if no user name can be attributed to the contribution.:
         {{ 
         \"contributor_name_1\": \"summary\",
         \"contributor_name_2\": \"summary\",
         ...
         }}
-        For example, if contributor_name_1 raised the issue and contributor_name_2 provided a solution, while contributor_name_3 had no significant contribution, the output should look like this:
+For example, if contributor_name_1 raised the issue and contributor_name_2 provided a solution, while contributor_name_3 had no significant contribution, the output should look like this:
 {{ 
     \"contributor_name_1\": \"Identified a bug affecting the deployment pipeline.\",
     \"contributor_name_2\": \"Offered a workaround using an alternative deployment strategy.\"
