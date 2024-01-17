@@ -240,7 +240,7 @@ pub async fn analyze_issue_integrated(
         token_str
     );
     // let octocrab = get_octo(&GithubLogin::Default);
-log::info!("comments_url: {}", comments_url);
+    log::info!("comments_url: {}", comments_url);
     let response = github_http_get(&comments_url).await?;
     let comments_obj = serde_json::from_slice::<Vec<Comment>>(&response)?;
 
@@ -263,7 +263,7 @@ log::info!("comments_url: {}", comments_url);
     let target_str = target_person
         .clone()
         .map_or("key participants".to_string(), |t| t.to_string());
-log::info!("issue_title: {}", issue_title);
+    log::info!("issue_title: {}", issue_title);
     let sys_prompt_1 = &format!(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
     );
@@ -283,12 +283,20 @@ log::info!("issue_title: {}", issue_title);
     //     all_text_from_issue,
     //     commenters_to_watch_str
     // );
-    let usr_prompt_1 = &format!(
+    let usr_prompt_1 =
+        &format!(
         "Analyze the GitHub issue content: {}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Highlight the role and significance of '{}' in contributing towards the resolution or progression of the discussion. If the target person's contribution is negligible or non-existent, leave the corresponding summary blank. Format the analysis into a flat JSON structure with one level of depth where each key maps directly to a single string value. Use the following template, replacing 'contributor_name' with the actual contributor's name, and 'summary' with your analysis of their contributions or an empty string if their contribution is negligible: 
         {{ 
         \"contributor_name_1\": \"summary\",
         \"contributor_name_2\": \"summary\"
-        }}",
+        }}
+        For example, if contributor_name_1 raised the issue and contributor_name_2 provided a solution, while contributor_name_3 had no significant contribution, the output should look like this:
+{{ 
+  \"contributor_name_1\": \"Raised an issue tracking the implementation status of blahblah.\",
+  \"contributor_name_2\": \"Suggested a potential solution involving the use of feature flags.\",
+  \"contributor_name_3\": \"\"
+}}
+Please follow this format for the analysis.",
         all_text_from_issue,
         commenters_to_watch_str
     );
@@ -302,7 +310,6 @@ log::info!("issue_title: {}", issue_title);
         ).await
     {
         Ok(r) => {
-
             log::info!("Summary: {:?}", r.clone());
             let parsed = parse_issue_summary_from_json(&r)
                 .ok()

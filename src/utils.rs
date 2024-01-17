@@ -290,30 +290,53 @@ pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
 
     Ok(output)
 }
-/* pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
-    let parsed: Value = match serde_json::from_str(input) {
-        Ok(v) => v,
-        Err(_e) => {log::error!("Error parsing json: {:?}", _e); return Err(anyhow::anyhow!(_e))},
-    };
 
-    let mut output = String::new();
+pub fn parse_issue_summary_from_json(input: &str) -> anyhow::Result<Vec<(String, String)>> {
+    use regex::Regex;
+    use serde_json::{ Value, Map };
 
-    let keys = ["impactful", "alignment", "patterns", "synergy", "significance"];
+    let parsed_result: Result<Map<String, Value>, serde_json::Error> = serde_json::from_str(input);
 
-    for key in keys.iter() {
-        if let Some(value) = parsed.get(key) {
-            if value.is_string() {
-                if !output.is_empty() {
-                    output.push_str(" ");
+    match parsed_result {
+        Ok(parsed) => {
+            let summaries = parsed
+                .iter()
+                .filter_map(|(key, value)| {
+                    if let Some(summary_str) = value.as_str() {
+                        Some((key.clone(), summary_str.to_owned()))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<(String, String)>>();
+            Ok(summaries)
+        }
+
+        Err(e) => {
+            log::error!("Error parsing JSON: {:?}", e);
+
+            let re = Regex::new(r#""([^"]+)":\s*"([^"]*)""#).map_err(|_|
+                anyhow::Error::msg("Failed to compile regex pattern")
+            )?;
+
+            let mut results = Vec::new();
+
+            for cap in re.captures_iter(input) {
+                if let (Some(key), Some(value)) = (cap.get(1), cap.get(2)) {
+                    results.push((key.as_str().to_string(), value.as_str().to_string()));
                 }
-                output.push_str(value.as_str().unwrap());
+            }
+
+            if results.is_empty() {
+                Err(anyhow::Error::msg("No fields could be extracted from malformed JSON"))
+            } else {
+                Ok(results)
             }
         }
     }
-    Ok(output)
-} */
+}
 
-pub fn parse_issue_summary_from_json(input: &str) -> anyhow::Result<Vec<(String, String)>> {
+/* pub fn parse_issue_summary_from_json(input: &str) -> anyhow::Result<Vec<(String, String)>> {
     let parsed: serde_json::Map<String, serde_json::Value> = serde_json::from_str(input)?;
 
     let summaries = parsed
@@ -328,7 +351,7 @@ pub fn parse_issue_summary_from_json(input: &str) -> anyhow::Result<Vec<(String,
         .collect::<Vec<(String, String)>>(); // Collect into a Vec of tuples
 
     Ok(summaries)
-}
+} */
 
 /* pub async fn github_http_post_gql(query: &str) -> anyhow::Result<Vec<u8>> {
     use http_req::{request::Method, request::Request, uri::Uri};
