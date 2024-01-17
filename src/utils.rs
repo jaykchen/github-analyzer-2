@@ -83,65 +83,6 @@ pub fn squeeze_fit_post_texts(inp_str: &str, max_len: u16, split: f32) -> String
         .map_or("failed to decode tokens".to_string(), |s| s.to_string())
 }
 
-/* pub async fn chain_of_chat(
-    sys_prompt_1: &str,
-    usr_prompt_1: &str,
-    chat_id: &str,
-    gen_len_1: u16,
-    usr_prompt_2: &str,
-    gen_len_2: u16,
-    error_tag: &str
-) -> anyhow::Result<String> {
-    let client = Client::new();
-
-    let mut messages = vec![
-        ChatCompletionRequestSystemMessageArgs::default()
-            .content(sys_prompt_1)
-            .build()
-            .expect("Failed to build system message")
-            .into(),
-        ChatCompletionRequestUserMessageArgs::default().content(usr_prompt_1).build()?.into()
-    ];
-    let request = CreateChatCompletionRequestArgs::default()
-        .max_tokens(gen_len_1)
-        .model("mistralai/Mistral-7B-Instruct-v0.1")
-        .messages(messages.clone())
-        .build()?;
-
-    let chat = client.chat().create(request).await?;
-
-    match chat.choices[0].message.clone().content {
-        Some(_) => {
-            // log::info!("{:?}", res);
-        }
-        None => {
-            return Err(anyhow::anyhow!(error_tag.to_string()));
-        }
-    }
-
-    messages.push(
-        ChatCompletionRequestUserMessageArgs::default().content(usr_prompt_2).build()?.into()
-    );
-
-    let request = CreateChatCompletionRequestArgs::default()
-        .max_tokens(gen_len_2)
-        .model("mistralai/Mistral-7B-Instruct-v0.1")
-        .messages(messages)
-        .build()?;
-
-    let chat = client.chat().create(request).await?;
-
-    match chat.choices[0].message.clone().content {
-        Some(res) => {
-            // log::info!("{:?}", res);
-            Ok(res)
-        }
-        None => {
-            return Err(anyhow::anyhow!(error_tag.to_string()));
-        }
-    }
-} */
-
 pub async fn chain_of_chat(
     sys_prompt_1: &str,
     usr_prompt_1: &str,
@@ -182,13 +123,11 @@ pub async fn chain_of_chat(
         .messages(messages.clone())
         .build()?;
 
-    // dbg!("{:?}", request.clone());
-
     let chat = client.chat().create(request).await?;
 
     match chat.choices[0].message.clone().content {
         Some(res) => {
-            println!("{:?}", res);
+            log::info!("{:?}", res);
         }
         None => {
             return Err(anyhow::anyhow!(error_tag.to_string()));
@@ -209,7 +148,7 @@ pub async fn chain_of_chat(
 
     match chat.choices[0].message.clone().content {
         Some(res) => {
-            println!("{:?}", res);
+            log::info!("{:?}", res);
             Ok(res)
         }
         None => {
@@ -252,20 +191,19 @@ pub async fn chat_inner_async(
         .messages(messages)
         .build()?;
 
-    let chat = match client.chat().create(request).await {
-        Ok(chat) => chat,
+    match client.chat().create(request).await {
+        Ok(chat) =>
+            match chat.choices[0].message.clone().content {
+                Some(res) => {
+                    // log::info!("{:?}", chat.choices[0].message.clone());
+                    Ok(res)
+                }
+                None => Err(anyhow::anyhow!("Failed to get reply from OpenAI")),
+            }
         Err(_e) => {
-            println!("Error getting response from OpenAI: {:?}", _e);
-            panic!();
+            log::error!("Error getting response from OpenAI: {:?}", _e);
+            Err(anyhow::anyhow!(_e))
         }
-    };
-
-    match chat.choices[0].message.clone().content {
-        Some(res) => {
-            // log::info!("{:?}", chat.choices[0].message.clone());
-            Ok(res)
-        }
-        None => Err(anyhow::anyhow!("Failed to get reply from OpenAI")),
     }
 }
 
@@ -301,42 +239,6 @@ impl Config for LocalServiceProviderConfig {
         &self.api_key
     }
 }
-
-/* pub async fn chat_inner_async(
-    system_prompt: &str,
-    user_input: &str,
-    max_token: u16,
-    model: &str
-) -> anyhow::Result<String> {
-    let client = Client::new();
-
-    let messages = vec![
-        ChatCompletionRequestSystemMessageArgs::default()
-            .content(system_prompt)
-            .build()
-            .expect("Failed to build system message")
-            .into(),
-        ChatCompletionRequestUserMessageArgs::default().content(user_input).build()?.into()
-    ];
-    let request = CreateChatCompletionRequestArgs::default()
-        .max_tokens(max_token)
-        .model(model)
-        .messages(messages)
-        .build()?;
-
-    let chat = client.chat().create(request).await?;
-
-    // let check = chat.choices.get(0).clone().unwrap();
-    // send_message_to_channel("ik8", "general", format!("{:?}", check)).await;
-
-    match chat.choices[0].message.clone().content {
-        Some(res) => {
-            // log::info!("{:?}", chat.choices[0].message.clone());
-            Ok(res)
-        }
-        None => Err(anyhow::anyhow!("Failed to get reply from OpenAI")),
-    }
-} */
 
 pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
     use regex::Regex;
