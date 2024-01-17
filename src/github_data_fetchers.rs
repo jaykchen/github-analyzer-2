@@ -212,7 +212,7 @@ pub async fn get_recent_committers(
         }
         None => log::error!("failed to get commits"),
     }
-
+log::info!("contributors: {:?}", contributors);
     Ok(contributors)
 }
 

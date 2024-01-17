@@ -259,7 +259,7 @@ pub async fn analyze_issue_integrated(
         match contributors_set.remove(commenter) {
             true => issue_commenters_to_watch.push(commenter.to_string()),
             false => (),
-        };
+        }
 
         let commenter_input = format!("{} commented: {}", commenter, comment_body);
         all_text_from_issue.push_str(&commenter_input);
@@ -370,21 +370,22 @@ pub async fn process_commits(
                 let usr_prompt_1 = format!(
                     "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
                 );
-                let summary = chat_inner_async(
-                    &sys_prompt_1,
-                    &usr_prompt_1,
-                    128,
-                    "mistralai/Mistral-7B-Instruct-v0.1"
-                ).await.ok()?;
-                // log::info!("Summary: {:?}", summary.clone());
-                Some((commit_obj.name, commit_obj.source_url, summary))
+
+                Some((commit_obj.name, commit_obj.source_url, sys_prompt_1, usr_prompt_1))
             }
         })
         .collect();
 
     let results = join_all(commit_futures).await;
     for result in results.into_iter().flatten() {
-        let (user_name, url, summary): (String, String, String) = result;
+        let (user_name, url, sys_prompt_1, usr_prompt_1): (String, String, String, String) = result;
+
+        let summary = chat_inner_async(
+            &sys_prompt_1,
+            &usr_prompt_1,
+            128,
+            "mistralai/Mistral-7B-Instruct-v0.1"
+        ).await?;
         // log::info!(
         //     "User: {:?}, Url: {:?}, Summary: {:?}",
         //     user_name.clone(),
