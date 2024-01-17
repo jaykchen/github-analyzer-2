@@ -90,6 +90,12 @@ pub async fn process_issues(
         ).await?;
 
         for (user_name, url, summary) in items {
+            log::info!(
+                "User: {:?}, Url: {:?}, Summary: {:?}",
+                user_name.clone(),
+                url.clone(),
+                summary.clone()
+            );
             issues_map
                 .entry(user_name.clone())
                 .and_modify(|tup| {
