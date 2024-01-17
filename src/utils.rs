@@ -293,7 +293,7 @@ pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
 
 pub fn parse_issue_summary_from_json(input: &str) -> anyhow::Result<Vec<(String, String)>> {
     use regex::Regex;
-    use serde_json::{ Value, Map };
+    use serde_json::Map;
 
     let parsed_result: Result<Map<String, Value>, serde_json::Error> = serde_json::from_str(input);
 

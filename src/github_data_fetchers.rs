@@ -1,7 +1,7 @@
-use crate::utils::*;
+use std::collections::HashSet;
 use chrono::{ DateTime, Duration, Utc };
 use derivative::Derivative;
-use github_flows::octocrab::models::{ issues::Issue, Repository, User };
+use github_flows::octocrab::models::{ issues::Issue, User };
 use github_flows::{ get_octo, octocrab, GithubLogin };
 use serde::{ Deserialize, Serialize };
 
@@ -193,6 +193,24 @@ pub async fn get_contributors(owner: &str, repo: &str) -> Result<Vec<String>, oc
                 break 'outer;
             }
         }
+    }
+
+    Ok(contributors)
+}
+
+pub async fn get_recent_committers(
+    owner: &str,
+    repo: &str,
+    n_days: u16
+) -> Result<HashSet<String>, octocrab::Error> {
+    let mut contributors = HashSet::new();
+    match get_commits_in_range_search(owner, repo, None, n_days * 5, None).await {
+        Some((_, commits_vec)) => {
+            commits_vec.into_iter().for_each(|commit| {
+                contributors.insert(commit.name.clone());
+            });
+        }
+        None => log::error!("failed to get commits"),
     }
 
     Ok(contributors)
@@ -426,155 +444,3 @@ pub async fn get_commits_in_range_search(
 
     Some((count, git_memory_vec))
 }
-
-/* pub async fn get_commits_in_range(
-    owner: &str,
-    repo: &str,
-    user_name: Option<String>,
-    range: u16,
-    token: Option<String>,
-) -> Option<(usize, Vec<GitMemory>, Vec<GitMemory>)> {
-    #[derive(Debug, Deserialize, Serialize, Clone)]
-    struct User {
-        login: String,
-    }
-
-    #[derive(Serialize, Deserialize, Debug)]
-    struct GithubCommit {
-        sha: String,
-        html_url: String,
-        author: Option<User>,    // made nullable
-        committer: Option<User>, // made nullable
-        commit: CommitDetails,
-    }
-
-    #[derive(Serialize, Deserialize, Debug)]
-    struct CommitDetails {
-        author: CommitUserDetails,
-        message: String,
-        // committer: CommitUserDetails,
-    }
-
-    #[derive(Serialize, Deserialize, Debug)]
-    struct CommitUserDetails {
-        date: Option<DateTime<Utc>>,
-    }
-    let token_str = match &token {
-        None => String::from(""),
-        Some(t) => format!("&token={}", t.as_str()),
-    };
-    let author_str = match &user_name {
-        None => String::from(""),
-        Some(t) => format!("&author={}", t.as_str()),
-    };
-    let base_commit_url =
-        format!("repos/{owner}/{repo}/commits?{author_str}&sort=desc&per_page=100{token_str}");
-    // let base_commit_url =
-    //     format!("https://api.github.com/repos/{owner}/{repo}/commits?&author={author}&sort=desc&per_page=100{token_str}");
-
-    // let url_str = format!(
-    //     "search/commits?q={}&sort=updated&order=desc&per_page=100{token_str}",
-    //     encoded_query
-    // );
-    // let url_str = format!(
-    //     "https://api.github.com/search/issues?q={}&sort=updated&order=desc&per_page=100{token_str}",
-    //     encoded_query
-    // );
-
-    let mut git_memory_vec = vec![];
-    let now = Utc::now();
-    let n_days_ago = (now - Duration::days(range as i64)).date_naive();
-    let octocrab = get_octo(&GithubLogin::Default);
-
-    // match octocrab
-    // .get::<Page<Issue>, _, ()>(&url_str, None::<&()>)
-    // .await
-
-    match octocrab
-        .get::<Vec<GithubCommit>, _, ()>(&base_commit_url, None::<&()>)
-        .await
-    {
-        Err(e) => {
-            log::error!("Error parsing commits: {:?}", e);
-        }
-        Ok(commits) => {
-            for commit in commits {
-                if let Some(commit_date) = &commit.commit.author.date {
-                    if commit_date.date_naive() <= n_days_ago {
-                        continue;
-                    }
-
-                    if let Some(user_name) = &user_name {
-                        if let Some(author) = &commit.author {
-                            if author.login.as_str() == user_name {
-                                git_memory_vec.push(GitMemory {
-                                    memory_type: MemoryType::Commit,
-                                    name: author.login.clone(),
-                                    tag_line: commit.commit.message.clone(),
-                                    source_url: commit.html_url.clone(),
-                                    payload: String::from(""),
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let count = git_memory_vec.len();
-
-    Some((count, git_memory_vec))
-} */
-
-pub async fn get_user_repos_in_language(user: &str, language: &str) -> Option<Vec<Repository>> {
-    #[derive(Debug, Deserialize)]
-    struct Page<T> {
-        pub items: Vec<T>,
-        pub total_count: Option<u64>,
-    }
-
-    let query = format!("user:{} language:{} sort:stars", user, language);
-    let encoded_query = urlencoding::encode(&query);
-
-    let mut out: Vec<Repository> = vec![];
-    let mut total_pages = None;
-    let mut current_page = 1;
-
-    loop {
-        let url_str = format!("search/repositories?q={}&page={}", encoded_query, current_page);
-
-        let octocrab = get_octo(&GithubLogin::Default);
-
-        match octocrab.get::<Page<Repository>, _, ()>(&url_str, None::<&()>).await {
-            Err(_e) => {
-                log::error!("Error parsing Page<Repository>: {:?}", _e);
-                break;
-            }
-            Ok(repo_page) => {
-                if total_pages.is_none() {
-                    if let Some(count) = repo_page.total_count {
-                        total_pages = Some(((count as f64) / 30.0).ceil() as usize);
-                    }
-                }
-
-                for repo in repo_page.items {
-                    out.push(repo);
-                }
-
-                current_page += 1;
-                if current_page > total_pages.unwrap_or(usize::MAX) {
-                    break;
-                }
-            }
-        }
-    }
-
-    if out.is_empty() {
-        None
-    } else {
-        Some(out)
-    }
-}
-
-

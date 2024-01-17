@@ -17,7 +17,7 @@ pub async fn weekly_report(
 
     let contributors_set;
 
-    match is_valid_owner_repo(owner, repo).await {
+    match is_valid_owner_repo(owner, repo, n_days).await {
         Err(_e) => {
             send_response(
                 400,

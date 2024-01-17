@@ -8,7 +8,8 @@ use std::collections::{ HashMap, HashSet };
 
 pub async fn is_valid_owner_repo(
     owner: &str,
-    repo: &str
+    repo: &str,
+    n_days: u16
 ) -> anyhow::Result<(String, String, HashSet<String>)> {
     #[derive(Deserialize)]
     struct CommunityProfile {
@@ -63,8 +64,8 @@ pub async fn is_valid_owner_repo(
         payload = description.clone();
     }
 
-    let contributors_set = match get_contributors(owner, repo).await {
-        Ok(contributors) => contributors.into_iter().collect::<HashSet<String>>(),
+    let contributors_set = match get_recent_committers(owner, repo, n_days).await {
+        Ok(contributors) => contributors,
         Err(_e) => HashSet::<String>::new(),
     };
 
@@ -77,7 +78,6 @@ pub async fn process_issues(
     contributors_set: HashSet<String>,
     token: Option<String>
 ) -> anyhow::Result<HashMap<String, (String, String)>> {
-    use futures::future::join_all;
 
     let mut issues_map = HashMap::<String, (String, String)>::new();
 
