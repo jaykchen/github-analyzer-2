@@ -240,7 +240,7 @@ pub async fn analyze_issue_integrated(
         token_str
     );
     // let octocrab = get_octo(&GithubLogin::Default);
-
+log::info!("comments_url: {}", comments_url);
     let response = github_http_get(&comments_url).await?;
     let comments_obj = serde_json::from_slice::<Vec<Comment>>(&response)?;
 
@@ -263,7 +263,7 @@ pub async fn analyze_issue_integrated(
     let target_str = target_person
         .clone()
         .map_or("key participants".to_string(), |t| t.to_string());
-
+log::info!("issue_title: {}", issue_title);
     let sys_prompt_1 = &format!(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
     );
