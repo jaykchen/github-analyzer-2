@@ -115,7 +115,6 @@ pub async fn process_issues(
     Ok(issues_map)
 }
 
-
 pub async fn analyze_readme(content: &str) -> Option<String> {
     let sys_prompt_1 = &format!(
         "Your task is to objectively analyze a GitHub profile and the README of their project. Focus on extracting factual information about the features of the project, and its stated objectives. Avoid making judgments or inferring subjective value."
@@ -227,8 +226,8 @@ pub async fn analyze_issue_integrated(
         "Review the GitHub issue created by '{issue_creator_name}' with the title '{issue_title}'. Examine the discussions thoroughly: {all_text_from_issue}. Extract the essence of the problem, any proposed solutions, and assess the contributions of {commenters_to_watch_str} in moving the discussion forward or resolving the issue."
     );
 
-    let usr_prompt_2 = &format!(
-        "Summarize the analysis by touching on the following points: the central problem presented in the issue, the primary solutions proposed or accepted, and the significance of key individual's role, specifically '{commenters_to_watch_str}', in the discussion's progress or resolution. If a person's contribution is minimal or not present, exclude them from the summary. Present the analysis in a flat JSON structure with a single level of depth, where each key corresponds directly to one multipart sentence that summarises the contributions. Follow this template, substituting 'contributor_name' with the actual name and 'summary' with your analysis of their input. Use real user names, don't use placeholder names like 'user_1' or 'contributor_name_1', skip the 'contrubutor: summary' pair if no user name can be attributed to the contribution.:
+/*     let usr_prompt_2 = &format!(
+        "Focusing only on the roles of '{commenters_to_watch_str}', summarize the analysis by touching on the following points: the central problem presented in the issue, the primary solutions proposed or accepted, and the significance of the contributors in focus, in the discussion's progress or resolution. If a person's contribution is minimal, like administrative efforts including but not limited to tagging or soliciting input, exclude them from the summary. Present the analysis in a flat JSON structure with a single level of depth, where each key corresponds directly to one multipart sentence that summarises the contributions. Follow this template, substituting 'contributor_name' with the actual name among '{commenters_to_watch_str}', and 'summary' with your analysis of their input. Please limit your output to most significant contrubutors only, 3 at most:
         {{ 
         \"contributor_name_1\": \"summary\",
         \"contributor_name_2\": \"summary\",
@@ -239,6 +238,16 @@ For example, if contributor_name_1 raised the issue and contributor_name_2 provi
     \"contributor_name_1\": \"Identified a bug affecting the deployment pipeline.\",
     \"contributor_name_2\": \"Offered a workaround using an alternative deployment strategy.\"
 }}
+Adhere to this format for the summarized analysis."
+    ); */
+
+    let usr_prompt_2 = &format!(
+        "Focusing only on the roles of '{commenters_to_watch_str}', summarize the analysis by touching on the following points: the central problem presented in the issue, the primary solutions proposed or accepted, and the significance of the contributors in focus, in the discussion's progress or resolution. If a person's contribution is minimal, like administrative efforts including but not limited to tagging or soliciting input, exclude them from the summary. Present the analysis in a flat JSON structure with a single level of depth, where each key corresponds directly to one multipart sentence that summarises the contributions. Follow this template, substituting 'contributor_name' with the actual name among '{commenters_to_watch_str}', and 'summary' with your analysis of their input. Please limit your output to most significant contrubutors only, 3 at most:
+        {{ 
+        \"contributor_name_1\": \"summary\",
+        \"contributor_name_2\": \"summary\",
+        ...
+        }}
 Adhere to this format for the summarized analysis."
     );
 
