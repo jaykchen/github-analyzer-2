@@ -100,7 +100,7 @@ pub async fn chain_of_chat(
     headers.insert(USER_AGENT, HeaderValue::from_static("MyClient/1.0.0"));
     let config = LocalServiceProviderConfig {
         // api_base: String::from("http://52.37.228.1:8080/v1"),
-        api_base: String::from("https://api.deepinfra.com/v1/openai"),
+        api_base: String::from("http://52.37.228.1:8080/v1"),
         headers: headers,
         api_key: Secret::new(token),
         query: HashMap::new(),
@@ -170,7 +170,7 @@ pub async fn chat_inner_async(
     headers.insert(USER_AGENT, HeaderValue::from_static("MyClient/1.0.0"));
     let config = LocalServiceProviderConfig {
         // api_base: String::from("http://127.0.0.1:8080/v1"),
-        api_base: String::from("https://api.deepinfra.com/v1/openai"),
+        api_base: String::from("http://52.37.228.1:8080/v1"),
         headers: headers,
         api_key: Secret::new(token),
         query: HashMap::new(),
