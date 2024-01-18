@@ -156,7 +156,6 @@ pub async fn analyze_issue_integrated(
     let issue_creator_name = &issue.user.login;
     let issue_title = issue.title.to_string();
     let issue_number = issue.number;
-    let issue_commenters_to_watch = contributors_set.clone().into_iter().collect::<Vec<String>>();
     let issue_body = match &issue.body {
         Some(body) => squeeze_fit_remove_quoted(body, 400, 0.7),
         None => "".to_string(),
@@ -192,14 +191,18 @@ pub async fn analyze_issue_integrated(
     // log::info!("comments_url: {}", comments_url);
     let response = github_http_get(&comments_url).await?;
     let comments_obj = serde_json::from_slice::<Vec<Comment>>(&response)?;
+    let mut contributors_set = contributors_set.clone();
 
+    let mut issue_commenters_to_watch = Vec::new();
     for comment in &comments_obj {
         let comment_body = match &comment.body {
             Some(body) => squeeze_fit_remove_quoted(body, 200, 1.0),
             None => String::new(),
         };
         let commenter = &comment.user.login;
-
+        if contributors_set.remove(commenter) {
+            issue_commenters_to_watch.push(commenter.to_string());
+        }
         let commenter_input = format!("{} commented: {}", commenter, comment_body);
         all_text_from_issue.push_str(&commenter_input);
     }
@@ -226,7 +229,7 @@ pub async fn analyze_issue_integrated(
         "Review the GitHub issue created by '{issue_creator_name}' with the title '{issue_title}'. Examine the discussions thoroughly: {all_text_from_issue}. Extract the essence of the problem, any proposed solutions, and assess the contributions of {commenters_to_watch_str} in moving the discussion forward or resolving the issue."
     );
 
-/*     let usr_prompt_2 = &format!(
+    /*     let usr_prompt_2 = &format!(
         "Focusing only on the roles of '{commenters_to_watch_str}', summarize the analysis by touching on the following points: the central problem presented in the issue, the primary solutions proposed or accepted, and the significance of the contributors in focus, in the discussion's progress or resolution. If a person's contribution is minimal, like administrative efforts including but not limited to tagging or soliciting input, exclude them from the summary. Present the analysis in a flat JSON structure with a single level of depth, where each key corresponds directly to one multipart sentence that summarises the contributions. Follow this template, substituting 'contributor_name' with the actual name among '{commenters_to_watch_str}', and 'summary' with your analysis of their input. Please limit your output to most significant contrubutors only, 3 at most:
         {{ 
         \"contributor_name_1\": \"summary\",
