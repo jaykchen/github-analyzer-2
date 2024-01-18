@@ -5,6 +5,7 @@ use github_flows::{ get_octo, octocrab::models::{ issues::Comment, issues::Issue
 use log;
 use serde::Deserialize;
 use std::collections::{ HashMap, HashSet };
+use std::f32::consts::E;
 
 pub async fn is_valid_owner_repo(
     owner: &str,
@@ -114,62 +115,6 @@ pub async fn process_issues(
     Ok(issues_map)
 }
 
-/* pub async fn process_issues(
-    inp_vec: Vec<Issue>,
-    target_person: Option<String>,
-    contributors_set: HashSet<String>,
-    token: Option<String>
-) -> anyhow::Result<HashMap<String, (String, String)>> {
-    use futures::future::join_all;
-
-    let issue_futures: Vec<_> = inp_vec
-        .into_iter()
-        .map(|issue| {
-            let target_person = target_person.clone();
-            let token = token.clone();
-            let contributors_set = contributors_set.clone();
-            async move {
-                let ve = analyze_issue_integrated(
-                    &issue,
-                    target_person,
-                    contributors_set,
-                    token
-                ).await.ok()?;
-                Some(ve)
-            }
-        })
-        .collect();
-
-    let results = join_all(issue_futures).await;
-    let mut issues_map = HashMap::<String, (String, String)>::new();
-
-    for result in results.into_iter().flatten() {
-        for item in result {
-            let (user_name, url, summary) = item;
-            // log::info!(
-            //     "User: {:?}, Url: {:?}, Summary: {:?}",
-            //     user_name.clone(),
-            //     url.clone(),
-            //     summary.clone()
-            // );
-            issues_map
-                .entry(user_name.clone())
-                .and_modify(|tup| {
-                    tup.0.push_str("\n");
-                    tup.0.push_str(&url);
-                    tup.1.push_str("\n");
-                    tup.1.push_str(&summary);
-                })
-                .or_insert((url.to_string(), summary.to_string()));
-        }
-    }
-
-    if issues_map.len() == 0 {
-        anyhow::bail!("No issues processed");
-    }
-
-    Ok(issues_map)
-} */
 
 pub async fn analyze_readme(content: &str) -> Option<String> {
     let sys_prompt_1 = &format!(
@@ -212,7 +157,7 @@ pub async fn analyze_issue_integrated(
     let issue_creator_name = &issue.user.login;
     let issue_title = issue.title.to_string();
     let issue_number = issue.number;
-    let mut issue_commenters_to_watch = Vec::new();
+    let issue_commenters_to_watch = contributors_set.clone().into_iter().collect::<Vec<String>>();
     let issue_body = match &issue.body {
         Some(body) => squeeze_fit_remove_quoted(body, 400, 0.7),
         None => "".to_string(),
@@ -227,7 +172,7 @@ pub async fn analyze_issue_integrated(
         .join(", ");
 
     let mut all_text_from_issue = format!(
-        "User '{}', opened an issue titled '{}', labeled '{}', with the following post: '{}'.",
+        "'{}', opened an issue titled '{}', labeled '{}', with the following post: '{}'.",
         issue_creator_name,
         issue_title,
         labels,
@@ -248,7 +193,6 @@ pub async fn analyze_issue_integrated(
     // log::info!("comments_url: {}", comments_url);
     let response = github_http_get(&comments_url).await?;
     let comments_obj = serde_json::from_slice::<Vec<Comment>>(&response)?;
-    let mut contributors_set = contributors_set.clone();
 
     for comment in &comments_obj {
         let comment_body = match &comment.body {
@@ -256,10 +200,6 @@ pub async fn analyze_issue_integrated(
             None => String::new(),
         };
         let commenter = &comment.user.login;
-        match contributors_set.remove(commenter) {
-            true => issue_commenters_to_watch.push(commenter.to_string()),
-            false => (),
-        }
 
         let commenter_input = format!("{} commented: {}", commenter, comment_body);
         all_text_from_issue.push_str(&commenter_input);
@@ -272,12 +212,15 @@ pub async fn analyze_issue_integrated(
     let sys_prompt_1 =
         "Analyze the GitHub issues data to identify key problem areas and notable contributions from participants. Focus on specific solutions mentioned, and trace evidence of contributions that led to a solution or consensus. The goal is to map out significant technical contributions and the developmental story behind the issue's resolution.";
 
-    let commenters_to_watch_str = match
-        (target_person.is_none(), issue_commenters_to_watch.is_empty())
-    {
-        (false, _) => target_person.unwrap_or_default().to_string(),
-        (true, false) => issue_commenters_to_watch.join(", "),
-        (_, _) => String::from("top contributors, no more than 3,"),
+    let commenters_to_watch_str = match target_person.is_none() {
+        false => target_person.unwrap_or_default().to_string(),
+        true =>
+            match issue_commenters_to_watch.is_empty() {
+                false => issue_commenters_to_watch.join(", "),
+                true => {
+                    return Err(anyhow::anyhow!("No commenters to watch"));
+                }
+            }
     };
 
     let usr_prompt_1 = &format!(
@@ -322,18 +265,6 @@ Adhere to this format for the summarized analysis."
                 .collect::<Vec<(String, String, String)>>();
 
             Ok(out)
-
-            // let out = format!("{} {}", issue_url, r);
-            // let name = target_person.map_or(issue_creator_name.to_string(), |t| t.to_string());
-            // let gm = GitMemory {
-            //     memory_type: MemoryType::Issue,
-            //     name: name,
-            //     tag_line: issue_title,
-            //     source_url: source_url,
-            //     payload: r,
-            // };
-
-            // Ok((out, gm))
         }
         Err(_e) => {
             log::error!("Error generating issue summary #{}: {}", issue_number, _e);
@@ -341,6 +272,7 @@ Adhere to this format for the summarized analysis."
         }
     }
 }
+
 pub async fn process_commits(
     inp_vec: Vec<GitMemory>,
     commits_map: &mut HashMap<String, (String, String)>,
@@ -368,7 +300,7 @@ pub async fn process_commits(
                 );
                 let tag_line = commit_obj.tag_line;
                 let usr_prompt_1 = format!(
-                    "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
+                    "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project."
                 );
 
                 Some((commit_obj.name, commit_obj.source_url, sys_prompt_1, usr_prompt_1))
@@ -377,9 +309,7 @@ pub async fn process_commits(
         .collect();
 
     let results = join_all(commit_futures).await;
-    for result in results.into_iter().flatten() {
-        let (user_name, url, sys_prompt_1, usr_prompt_1): (String, String, String, String) = result;
-
+    for (user_name, url, sys_prompt_1, usr_prompt_1) in results.into_iter().flatten() {
         let summary = chat_inner_async(
             &sys_prompt_1,
             &usr_prompt_1,

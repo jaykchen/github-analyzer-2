@@ -204,7 +204,7 @@ pub async fn get_recent_committers(
     n_days: u16
 ) -> Result<HashSet<String>, octocrab::Error> {
     let mut contributors = HashSet::new();
-    match get_commits_in_range_search(owner, repo, None, n_days * 5, None).await {
+    match get_commits_in_range_search(owner, repo, None, n_days, None).await {
         Some((_, commits_vec)) => {
             commits_vec.into_iter().for_each(|commit| {
                 contributors.insert(commit.name.clone());
